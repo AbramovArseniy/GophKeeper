@@ -60,9 +60,18 @@ func (s *Server) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(httpStatus)
 }
 
+func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {}
+
+func (s *Server) GetDataByTypeHandler(w http.ResponseWriter, r *http.Request) {}
+
+func (s *Server) GetAllUsersDataHandler(w http.ResponseWriter, r *http.Request) {}
+
 func (s *Server) Route() chi.Router {
 	router := chi.NewRouter()
 	router.Post("/user/register", s.RegistHandler)
 	router.Post("/user/login", s.AuthHandler)
+	router.Post("/user/add-data", s.PostSaveDataHandler)
+	router.Post("/user/get-data-by-type", s.GetDataByTypeHandler)
+	router.Get("/user/get-users-data", s.GetAllUsersDataHandler)
 	return router
 }
