@@ -25,7 +25,7 @@ func NewServer(cfg config.Config) *Server {
 	if cfg.Database == nil {
 		log.Fatal("No database connected")
 	} else {
-		storage = database.NewDatabase(cfg.Database)
+		storage, _ = database.NewDatabase(cfg.Database)
 	}
 	return &Server{
 		Addr:    cfg.Address,
