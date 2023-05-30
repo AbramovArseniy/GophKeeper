@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/config"
@@ -9,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const contentTypeJSON = "application/json"
+// const contentTypeJSON = "application/json"
 
 // MetricServer has HTTP server info
 type Server struct {
@@ -19,13 +20,13 @@ type Server struct {
 
 // NewServer creates new MetricServer
 func NewServer(cfg config.Config) *Server {
-	var (
-		storage storage.Storage
-	)
+	context := context.Background()
+	var storage storage.Storage
+
 	if cfg.Database == nil {
 		log.Fatal("No database connected")
 	} else {
-		storage, _ = database.NewDatabase(cfg.Database)
+		storage, _ = database.NewDatabase(context, cfg.DatabaseAddress)
 	}
 	return &Server{
 		Addr:    cfg.Address,

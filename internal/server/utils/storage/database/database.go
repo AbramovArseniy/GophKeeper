@@ -3,12 +3,21 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-
 	_ "github.com/jackc/pgx/v5/stdlib"
+)
+
+var (
+	ErrUserExists         = errors.New("such user already exist in DB")
+	ErrScanData           = errors.New("error while scan user ID")
+	ErrInvalidData        = errors.New("error user data is invalid")
+	ErrKeyNotFound        = errors.New("error user ID not found")
+	selectDataStmt string = `SELECT data from keeper WHERE type=$1 AND login=$2 AND name=$3`
 )
 
 type DataBase struct {
@@ -40,27 +49,49 @@ func (d *DataBase) Migrate() {
 		password_hash VARCHAR NOT NULL
 	);`)
 	if err != nil {
-		log.Printf("error during create users %s", err)
+		log.Printf("Error during create users %s", err)
 	}
 
-	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper (
-		entry_num VARCHAR(255) PRIMARY KEY,
-		entry_login VARCHAR(16),
-		entry_pass VARCHAR(255),
-		entry_text TEXT,
-		entry_binary BYTEA,
-		entry_bank BIGINT,
-		login VARCHAR(16) NOT NULL,
-		date_time TIMESTAMP NOT NULL
+	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
+		login INT NOT NULL,
+		data BYTEA NOT NULL,
+		type SMALLINT NOT NULL,
+		name VARCHAR NOT NULL,
+		UNIQUE(login, type, name)
 	);`)
 	if err != nil {
-		log.Printf("error during create orders %s", err)
+		log.Printf("Error during create keeper %s", err)
 	}
 }
 
-// var (
-// 	ErrUserExists   = errors.New("such user already exist in DB")
-// 	ErrScanData     = errors.New("error while scan user ID")
-// 	ErrInvalidData  = errors.New("error user data is invalid")
-// 	ErrKeyNotFound  = errors.New("error user ID not found")
-// )
+func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) error {
+	_, err := d.db.ExecContext(d.ctx, `INSERT INTO keeper (data, login, type, name) VALUES ($1, $2, $3, $4)`,
+		encryptedData, metadata.Login, metadata.Type, metadata.Name)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
+	var data []byte
+	tx, err := d.db.BeginTx(d.ctx, nil)
+	if err != nil {
+		return nil, ErrInvalidData
+	}
+	defer tx.Rollback()
+
+	selectData, err := tx.PrepareContext(d.ctx, selectDataStmt)
+	if err != nil {
+		return nil, ErrInvalidData
+	}
+	defer selectData.Close()
+
+	row := selectData.QueryRowContext(d.ctx, metadata.Type, metadata.Login, metadata.Name)
+	err = row.Scan(&data)
+	if err != nil {
+		return nil, ErrInvalidData
+	}
+	return data, nil
+}
