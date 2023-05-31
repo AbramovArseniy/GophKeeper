@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 
@@ -13,7 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// const contentTypeJSON = "application/json"
+const contentTypeJSON = "application/json"
 
 // MetricServer has HTTP server info
 type Server struct {
@@ -60,7 +62,47 @@ func (s *Server) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(httpStatus)
 }
 
-func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != contentTypeJSON {
+		http.Error(w, "wrong content type", http.StatusBadRequest)
+		log.Println("wrong content type:", r.Header.Get("Content-Type"))
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "cannot read request body", http.StatusInternalServerError)
+		log.Println("error while reading request body:", err)
+		return
+	}
+	defer r.Body.Close()
+	var meta storage.InfoMeta
+	err = json.Unmarshal(body, &meta)
+	if err != nil {
+		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		log.Println("error while unmarshalling request body:", err)
+		return
+	}
+	data := storage.NewInfo(meta.Type)
+	if data == nil {
+		http.Error(w, "wrong data type", http.StatusNotImplemented)
+		log.Println("wrong data type")
+		return
+	}
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		log.Println("error while unmarshalling request body:", err)
+		return
+	}
+	encData, err := data.MakeBinary()
+	if err != nil {
+		http.Error(w, "cannot encrypt data", http.StatusInternalServerError)
+		log.Println("error while encrypting data:", err)
+		return
+	}
+	s.Storage.SaveData(encData, meta)
+	w.WriteHeader(http.StatusOK)
+}
 
 func (s *Server) GetDataByTypeHandler(w http.ResponseWriter, r *http.Request) {}
 
