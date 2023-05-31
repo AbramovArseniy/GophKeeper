@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 )
 
 const (
@@ -28,6 +29,7 @@ func (i InfoType) String() string {
 
 type Info interface {
 	MakeBinary() ([]byte, error)
+	DecodeBinary(bin []byte) error
 }
 
 type InfoMeta struct {
@@ -50,6 +52,20 @@ func (p *InfoLoginPass) MakeBinary() ([]byte, error) {
 	return buff.Bytes(), err
 }
 
+func (p *InfoLoginPass) DecodeBinary(bin []byte) error {
+	var buff bytes.Buffer
+	_, err := buff.Write(bin)
+	if err != nil {
+		return fmt.Errorf("error while writing binary into buffer: %w", err)
+	}
+	dec := gob.NewDecoder(&buff)
+	err = dec.Decode(p)
+	if err != nil {
+		return fmt.Errorf("error while decoding binary: %w", err)
+	}
+	return err
+}
+
 type InfoCard struct {
 	CardNumber string `json:"card_number"`
 	Holder     string `json:"holder"`
@@ -66,6 +82,20 @@ func (c *InfoCard) MakeBinary() ([]byte, error) {
 	return buff.Bytes(), err
 }
 
+func (c *InfoCard) DecodeBinary(bin []byte) error {
+	var buff bytes.Buffer
+	_, err := buff.Write(bin)
+	if err != nil {
+		return fmt.Errorf("error while writing binary into buffer: %w", err)
+	}
+	dec := gob.NewDecoder(&buff)
+	err = dec.Decode(c)
+	if err != nil {
+		return fmt.Errorf("error while decoding binary: %w", err)
+	}
+	return err
+}
+
 type InfoText struct {
 	Text string `json:"text"`
 }
@@ -77,6 +107,20 @@ func (t *InfoText) MakeBinary() ([]byte, error) {
 	err := enc.Encode(t)
 
 	return buff.Bytes(), err
+}
+
+func (t *InfoText) DecodeBinary(bin []byte) error {
+	var buff bytes.Buffer
+	_, err := buff.Write(bin)
+	if err != nil {
+		return fmt.Errorf("error while writing binary into buffer: %w", err)
+	}
+	dec := gob.NewDecoder(&buff)
+	err = dec.Decode(t)
+	if err != nil {
+		return fmt.Errorf("error while decoding binary: %w", err)
+	}
+	return err
 }
 
 func NewInfo(infoType InfoType) Info {

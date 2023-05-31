@@ -68,13 +68,13 @@ func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("wrong content type:", r.Header.Get("Content-Type"))
 		return
 	}
+	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "cannot read request body", http.StatusInternalServerError)
 		log.Println("error while reading request body:", err)
 		return
 	}
-	defer r.Body.Close()
 	var meta storage.InfoMeta
 	err = json.Unmarshal(body, &meta)
 	if err != nil {
@@ -100,13 +100,63 @@ func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("error while encrypting data:", err)
 		return
 	}
-	s.Storage.SaveData(encData, meta)
+	err = s.Storage.SaveData(encData, meta)
+	if err != nil {
+		http.Error(w, "cannot save data to database", http.StatusInternalServerError)
+		log.Println("error while  saving data to database:", err)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) GetDataByTypeHandler(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) GetDataByTypeHandler(w http.ResponseWriter, r *http.Request) {
 
-func (s *Server) GetAllUsersDataHandler(w http.ResponseWriter, r *http.Request) {}
+}
+
+func (s *Server) GetAllUsersDataHandler(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != contentTypeJSON {
+		http.Error(w, "wrong content type", http.StatusBadRequest)
+		log.Println("wrong content type:", r.Header.Get("Content-Type"))
+		return
+	}
+	defer r.Body.Close()
+	reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "cannot read request body", http.StatusInternalServerError)
+		log.Println("error while reading request body:", err)
+		return
+	}
+	var meta storage.InfoMeta
+	err = json.Unmarshal(reqBody, &meta)
+	if err != nil {
+		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		log.Println("error while unmarshalling request body:", err)
+		return
+	}
+	info, err := s.Storage.GetData(meta)
+	if err != nil {
+		http.Error(w, "cannot get data from database", http.StatusInternalServerError)
+		log.Println("error while getting data from database:", err)
+		return
+	}
+	respBody, err := json.MarshalIndent(&info, "  ", "")
+	if err != nil {
+		http.Error(w, "cannot marshal response body", http.StatusInternalServerError)
+		log.Println("error while marshalling response body:", err)
+		return
+	}
+	_, err = w.Write(respBody)
+	if err != nil {
+		http.Error(w, "cannot write response body", http.StatusInternalServerError)
+		log.Println("error while writing response body:", err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
 
 func (s *Server) Route() chi.Router {
 	router := chi.NewRouter()
@@ -115,5 +165,6 @@ func (s *Server) Route() chi.Router {
 	router.Post("/user/add-data", s.PostSaveDataHandler)
 	router.Post("/user/get-data-by-type", s.GetDataByTypeHandler)
 	router.Get("/user/get-users-data", s.GetAllUsersDataHandler)
+	router.Post("/user/get-data-by-name", s.GetDataByNameHandler)
 	return router
 }

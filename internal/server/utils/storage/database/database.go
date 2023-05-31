@@ -74,7 +74,7 @@ func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) err
 	return nil
 }
 
-func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
+func (d *DataBase) GetData(metadata storage.InfoMeta) (storage.Info, error) {
 	var data []byte
 	tx, err := d.db.BeginTx(d.ctx, nil)
 	if err != nil {
@@ -93,5 +93,10 @@ func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
 	if err != nil {
 		return nil, ErrInvalidData
 	}
-	return data, nil
+	info := storage.NewInfo(metadata.Type)
+	err = info.DecodeBinary(data)
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding binary: %w", err)
+	}
+	return info, nil
 }
