@@ -1,3 +1,6 @@
 package storage
 
-type Storage interface{}
+type Storage interface {
+	SaveData(encryptedData []byte, metadata InfoMeta) error
+	GetData(metadata InfoMeta) ([]byte, error)
+}

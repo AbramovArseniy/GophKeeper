@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const contentTypeJSON = "application/json"
+// const contentTypeJSON = "application/json"
 
 // MetricServer has HTTP server info
 type Server struct {
@@ -24,14 +24,14 @@ type Server struct {
 
 // NewServer creates new MetricServer
 func NewServer(cfg config.Config) *Server {
-	var (
-		storage storage.Storage
-		err     error
-	)
+	context := context.Background()
+	var err error
+	var storage storage.Storage
+
 	if cfg.Database == nil {
 		log.Fatal("No database connected")
 	} else {
-		storage, err = database.NewDatabase(context.Background(), cfg.DatabaseAddress)
+		storage, err = database.NewDatabase(context, cfg.DatabaseAddress)
 		if err != nil {
 			log.Println("error while creating new database:", err)
 		}

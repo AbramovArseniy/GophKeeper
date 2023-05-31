@@ -8,7 +8,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.16.0
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/lestrrat-go/jwx v1.2.25
-	golang.org/x/crypto v0.7.0
+	golang.org/x/crypto v0.9.0
 )
 
 require (
