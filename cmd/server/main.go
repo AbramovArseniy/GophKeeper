@@ -38,4 +38,6 @@ func StartServer() {
 	}
 }
 
-func main() {}
+func main() {
+	StartServer()
+}

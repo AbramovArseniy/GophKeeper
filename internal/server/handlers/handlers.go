@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -30,13 +31,9 @@ func NewServer(cfg config.Config) *Server {
 	var err error
 	var storage storage.Storage
 
-	if cfg.Database == nil {
-		log.Fatal("No database connected")
-	} else {
-		storage, err = database.NewDatabase(context, cfg.DatabaseAddress)
-		if err != nil {
-			log.Println("error while creating new database:", err)
-		}
+	storage, err = database.NewDatabase(context, cfg.DatabaseAddress)
+	if err != nil {
+		log.Println("error while creating new database:", err)
 	}
 	return &Server{
 		Addr:    cfg.Address,
@@ -84,7 +81,7 @@ func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data := storage.NewInfo(meta.Type)
 	if data == nil {
-		http.Error(w, "wrong data type", http.StatusNotImplemented)
+		http.Error(w, "wrong data type", http.StatusBadRequest)
 		log.Println("wrong data type")
 		return
 	}
@@ -101,6 +98,9 @@ func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = s.Storage.SaveData(encData, meta)
+	if errors.Is(err, storage.ErrInvalidData) {
+		http.Error(w, "invalid data", http.StatusBadRequest)
+	}
 	if err != nil {
 		http.Error(w, "cannot save data to database", http.StatusInternalServerError)
 		log.Println("error while  saving data to database:", err)
@@ -137,7 +137,20 @@ func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("error while unmarshalling request body:", err)
 		return
 	}
+	if s.Auth != nil {
+		meta.Login = s.Auth.GetUserLogin(r)
+	} else {
+		log.Println("no jwt auth")
+	}
 	info, err := s.Storage.GetData(meta)
+	if errors.Is(err, storage.ErrDataNotFound) {
+		http.Error(w, "no data found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, storage.ErrInvalidData) {
+		http.Error(w, "invalid data", http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		http.Error(w, "cannot get data from database", http.StatusInternalServerError)
 		log.Println("error while getting data from database:", err)
@@ -160,11 +173,11 @@ func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) Route() chi.Router {
 	router := chi.NewRouter()
-	router.Post("/user/register", s.RegistHandler)
-	router.Post("/user/login", s.AuthHandler)
-	router.Post("/user/add-data", s.PostSaveDataHandler)
-	router.Post("/user/get-data-by-type", s.GetDataByTypeHandler)
-	router.Get("/user/get-users-data", s.GetAllUsersDataHandler)
-	router.Post("/user/get-data-by-name", s.GetDataByNameHandler)
+	router.Post("/user/register/", s.RegistHandler)
+	router.Post("/user/login/", s.AuthHandler)
+	router.Post("/user/add-data/", s.PostSaveDataHandler)
+	router.Post("/user/get-data-by-type/", s.GetDataByTypeHandler)
+	router.Get("/user/get-users-data/", s.GetAllUsersDataHandler)
+	router.Post("/user/get-data-by-name/", s.GetDataByNameHandler)
 	return router
 }

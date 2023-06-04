@@ -13,6 +13,7 @@ type Config struct {
 	Address         string `json:"address"`
 	DatabaseAddress string `json:"database_dsn"`
 	Database        *sql.DB
+	JWTSecret       string `json:"jwt_secret"`
 }
 
 const defaultAddress = "localhost"
@@ -23,11 +24,13 @@ func SetServerParams() (cfg Config) {
 		flagAddress    string
 		flagDataBase   string
 		flagConfigFile string
+		flagJWTSecret  string
 		cfgFile        string
 	)
 	flag.StringVar(&flagAddress, "a", defaultAddress, "server_address")
 	flag.StringVar(&flagDataBase, "d", "", "db_address")
 	flag.StringVar(&flagConfigFile, "c", "", "config_as_json")
+	flag.StringVar(&flagJWTSecret, "js", "", "jwt_secret_key")
 	flag.Parse()
 	var exists bool
 	if cfgFile, exists = os.LookupEnv("CONFIG"); !exists {
@@ -46,6 +49,10 @@ func SetServerParams() (cfg Config) {
 		if err != nil {
 			log.Println("error while unmarshalling config json:", err)
 		}
+	}
+	cfg.Address, exists = os.LookupEnv("JWT_SECRET")
+	if !exists {
+		cfg.JWTSecret = flagJWTSecret
 	}
 	cfg.Address, exists = os.LookupEnv("ADDRESS")
 	if !exists {
