@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+
+	// "log"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
+
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -15,9 +17,11 @@ import (
 var (
 	ErrUserExists         = errors.New("such user already exist in DB")
 	ErrScanData           = errors.New("error while scan user ID")
-	ErrInvalidData        = errors.New("error user data is invalid")
+	ErrInvalidData        = errors.New("error data is invalid")
+	ErrInvalidUser        = errors.New("error user is invalid")
 	ErrKeyNotFound        = errors.New("error user ID not found")
-	selectDataStmt string = `SELECT data from keeper WHERE type=$1 AND login=$2 AND name=$3`
+	selectDataStmt string = `SELECT data FROM keeper WHERE type=$1 AND login=$2 AND name=$3`
+	selectUserStmt string = `SELECT id, login, password_hash FROM users WHERE login=$1`
 )
 
 type DataBase struct {
@@ -42,27 +46,27 @@ func NewDatabase(ctx context.Context, dba string) (*DataBase, error) {
 	}, nil
 }
 
-func (d *DataBase) Migrate() {
-	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
-		id SERIAL UNIQUE,
-		login VARCHAR UNIQUE NOT NULL,
-		password_hash VARCHAR NOT NULL
-	);`)
-	if err != nil {
-		log.Printf("Error during create users %s", err)
-	}
+// func (d *DataBase) Migrate() {
+// 	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
+// 		id SERIAL UNIQUE,
+// 		login VARCHAR UNIQUE NOT NULL,
+// 		password_hash VARCHAR NOT NULL
+// 	);`)
+// 	if err != nil {
+// 		log.Printf("Error during create users %s", err)
+// 	}
 
-	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
-		login INT NOT NULL,
-		data BYTEA NOT NULL,
-		type SMALLINT NOT NULL,
-		name VARCHAR NOT NULL,
-		UNIQUE(login, type, name)
-	);`)
-	if err != nil {
-		log.Printf("Error during create keeper %s", err)
-	}
-}
+// 	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
+// 		login INT NOT NULL,
+// 		data BYTEA NOT NULL,
+// 		type SMALLINT NOT NULL,
+// 		name VARCHAR NOT NULL,
+// 		UNIQUE(login, type, name)
+// 	);`)
+// 	if err != nil {
+// 		log.Printf("Error during create keeper %s", err)
+// 	}
+// }
 
 func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) error {
 	_, err := d.db.ExecContext(d.ctx, `INSERT INTO keeper (data, login, type, name) VALUES ($1, $2, $3, $4)`,
@@ -94,4 +98,27 @@ func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
 		return nil, ErrInvalidData
 	}
 	return data, nil
+}
+
+func (d *DataBase) FindUser(login string) (*storage.User, error) {
+	var user storage.User
+	tx, err := d.db.BeginTx(d.ctx, nil)
+	if err != nil {
+		return nil, ErrInvalidUser
+	}
+	defer tx.Rollback()
+
+	selectUser, err := tx.PrepareContext(d.ctx, selectUserStmt)
+	if err != nil {
+		return nil, ErrInvalidUser
+	}
+	defer selectUser.Close()
+
+	row := selectUser.QueryRowContext(d.ctx, login)
+	err = row.Scan(&user.Id, &user.Login, &user.PasswordHash)
+	if err != nil {
+		return nil, ErrInvalidUser
+	}
+
+	return &user, nil
 }

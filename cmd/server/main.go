@@ -11,7 +11,6 @@ import (
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/handlers"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/config"
-	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage/database"
 )
 
 func StartServer() {
@@ -22,11 +21,6 @@ func StartServer() {
 		if err != nil {
 			log.Println("opening DB error:", err)
 			cfg.Database = nil
-		} else {
-			err = database.Migrate(cfg.Database, cfg.DatabaseAddress)
-			if err != nil {
-				log.Println("error while setting database:", err)
-			}
 		}
 		defer cfg.Database.Close()
 	} else {
