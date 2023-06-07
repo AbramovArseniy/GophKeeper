@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	// "log"
-
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
-
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -46,27 +45,41 @@ func NewDatabase(ctx context.Context, dba string) (*DataBase, error) {
 	}, nil
 }
 
-// func (d *DataBase) Migrate() {
-// 	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
-// 		id SERIAL UNIQUE,
-// 		login VARCHAR UNIQUE NOT NULL,
-// 		password_hash VARCHAR NOT NULL
-// 	);`)
-// 	if err != nil {
-// 		log.Printf("Error during create users %s", err)
-// 	}
+func (d *DataBase) Migrate() error {
+	// 	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
+	// 		id SERIAL UNIQUE,
+	// 		login VARCHAR UNIQUE NOT NULL,
+	// 		password_hash VARCHAR NOT NULL
+	// 	);`)
+	// 	if err != nil {
+	// 		log.Printf("Error during create users %s", err)
+	// 	}
 
-// 	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
-// 		login INT NOT NULL,
-// 		data BYTEA NOT NULL,
-// 		type SMALLINT NOT NULL,
-// 		name VARCHAR NOT NULL,
-// 		UNIQUE(login, type, name)
-// 	);`)
-// 	if err != nil {
-// 		log.Printf("Error during create keeper %s", err)
-// 	}
-// }
+	// 	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
+	// 		login INT NOT NULL,
+	// 		data BYTEA NOT NULL,
+	// 		type SMALLINT NOT NULL,
+	// 		name VARCHAR NOT NULL,
+	// 		UNIQUE(login, type, name)
+	// 	);`)
+	// 	if err != nil {
+	// 		log.Printf("Error during create keeper %s", err)
+	// 	}
+	path := "file://internal/server/utils/storage/database/migrations"
+	m, err := migrate.New(path, d.dba+"&x-migrations-table=migrations")
+	if err != nil {
+		return err
+	}
+	err = m.Up()
+	if errors.Is(err, migrate.ErrNoChange) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) error {
 	_, err := d.db.ExecContext(d.ctx, `INSERT INTO keeper (data, login, type, name) VALUES ($1, $2, $3, $4)`,
@@ -78,7 +91,7 @@ func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) err
 	return nil
 }
 
-func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
+func (d *DataBase) GetData(metadata storage.InfoMeta) (storage.Info, error) {
 	var data []byte
 	tx, err := d.db.BeginTx(d.ctx, nil)
 	if err != nil {
@@ -97,7 +110,16 @@ func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
 	if err != nil {
 		return nil, ErrInvalidData
 	}
-	return data, nil
+	info := storage.NewInfo(metadata.Type)
+	err = info.DecodeBinary(data)
+	if err != nil {
+		return nil, fmt.Errorf("error while decoding binary: %w", err)
+	}
+	return info, nil
+}
+
+func (d *DataBase) Close() {
+	d.db.Close()
 }
 
 func (d *DataBase) FindUser(login string) (*storage.User, error) {
