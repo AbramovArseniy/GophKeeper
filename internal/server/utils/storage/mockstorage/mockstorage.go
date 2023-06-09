@@ -1,8 +1,6 @@
 package mockstorage
 
 import (
-	"fmt"
-
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 )
 
@@ -38,7 +36,7 @@ func (ms *MockStorage) SaveData(encryptedData []byte, metadata storage.InfoMeta)
 	return nil
 }
 
-func (ms *MockStorage) GetData(metadata storage.InfoMeta) (storage.Info, error) {
+func (ms *MockStorage) GetData(metadata storage.InfoMeta) ([]byte, error) {
 	var data []byte
 	exists := false
 	for _, md := range ms.Storage {
@@ -50,12 +48,7 @@ func (ms *MockStorage) GetData(metadata storage.InfoMeta) (storage.Info, error) 
 	if !exists {
 		return nil, storage.ErrDataNotFound
 	}
-	info := storage.NewInfo(metadata.Type)
-	err := info.DecodeBinary(data)
-	if err != nil {
-		return nil, fmt.Errorf("error while decoding binary: %w", err)
-	}
-	return info, nil
+	return data, nil
 }
 
 func (ms *MockStorage) Close() {

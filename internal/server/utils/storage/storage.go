@@ -3,22 +3,26 @@ package storage
 import (
 	"errors"
 
-	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var (
-	ErrInvalidData  = errors.New("data is invalid")
-	ErrDataNotFound = errors.New("data is not found")
+	ErrInvalidData  = errors.New("error data is invalid")
+	ErrDataNotFound = errors.New("error data not found")
 )
+
+type User struct {
+	Id           int
+	Login        string
+	PasswordHash string
+}
 
 type Storage interface {
 	SaveData(encryptedData []byte, metadata InfoMeta) error
-	GetData(metadata InfoMeta) (Info, error)
-	Close()
+	GetData(metadata InfoMeta) ([]byte, error)
 }
 
 type UserStorage interface {
-	RegisterNewUser(login string, password string) (types.User, error)
-	GetUserData(login string) (types.User, error)
-	CheckUserData(login, hash string) bool
+	FindUser(login string) (*User, error)
 }

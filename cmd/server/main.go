@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +16,16 @@ import (
 func StartServer() {
 	cfg := config.SetServerParams()
 	var err error
+	if cfg.DatabaseAddress != "" {
+		cfg.Database, err = sql.Open("pgx", cfg.DatabaseAddress)
+		if err != nil {
+			log.Println("opening DB error:", err)
+			cfg.Database = nil
+		}
+		defer cfg.Database.Close()
+	} else {
+		cfg.Database = nil
+	}
 	s := handlers.NewServer(cfg)
 	handler := s.Route()
 	srv := &http.Server{

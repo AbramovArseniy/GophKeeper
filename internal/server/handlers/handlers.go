@@ -10,6 +10,7 @@ import (
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/services"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/config"
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/crypto"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage/database"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
@@ -20,9 +21,10 @@ const contentTypeJSON = "application/json"
 
 // MetricServer has HTTP server info
 type Server struct {
-	Addr    string
-	Storage storage.Storage
-	Auth    types.Authorization
+	Addr      string
+	Storage   storage.Storage
+	Auth      types.Authorization
+	SecretKey []byte
 }
 
 // NewServer creates new MetricServer
@@ -30,14 +32,15 @@ func NewServer(cfg config.Config) *Server {
 	context := context.Background()
 	var err error
 	var storage storage.Storage
-
+	secret := []byte(cfg.SecretKey)
 	storage, err = database.NewDatabase(context, cfg.DatabaseAddress)
 	if err != nil {
 		log.Println("error while creating new database:", err)
 	}
 	return &Server{
-		Addr:    cfg.Address,
-		Storage: storage,
+		Addr:      cfg.Address,
+		Storage:   storage,
+		SecretKey: secret,
 	}
 }
 
@@ -91,7 +94,13 @@ func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("error while unmarshalling request body:", err)
 		return
 	}
-	encData, err := data.MakeBinary()
+	binData, err := data.MakeBinary()
+	if err != nil {
+		http.Error(w, "cannot make data binary", http.StatusInternalServerError)
+		log.Println("error while making data binary:", err)
+		return
+	}
+	encData, err := crypto.Encrypt(binData, s.SecretKey)
 	if err != nil {
 		http.Error(w, "cannot encrypt data", http.StatusInternalServerError)
 		log.Println("error while encrypting data:", err)
@@ -142,7 +151,7 @@ func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Println("no jwt auth")
 	}
-	info, err := s.Storage.GetData(meta)
+	encData, err := s.Storage.GetData(meta)
 	if errors.Is(err, storage.ErrDataNotFound) {
 		http.Error(w, "no data found", http.StatusNotFound)
 		return
@@ -156,7 +165,18 @@ func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("error while getting data from database:", err)
 		return
 	}
-	respBody, err := json.MarshalIndent(&info, "  ", "")
+	binData, err := crypto.Decrypt(encData, s.SecretKey)
+	if err != nil {
+		http.Error(w, "cannot decrypt data", http.StatusInternalServerError)
+		log.Println("error while decrypting data:", err)
+		return
+	}
+	data := storage.NewInfo(meta.Type)
+	err = data.DecodeBinary(binData)
+	if err != nil {
+		log.Println("error while decoding binary: %w", err)
+	}
+	respBody, err := json.MarshalIndent(&data, "  ", "")
 	if err != nil {
 		http.Error(w, "cannot marshal response body", http.StatusInternalServerError)
 		log.Println("error while marshalling response body:", err)

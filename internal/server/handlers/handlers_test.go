@@ -190,7 +190,8 @@ func TestHandlers(t *testing.T) {
 		},
 	}
 	cfg := config.Config{
-		Address: "locashost:8080",
+		Address:   "locashost:8080",
+		SecretKey: "secretKeyReallyy",
 	}
 	s := NewServer(cfg)
 	s.Storage = mockstorage.NewMockStorage()
