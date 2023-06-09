@@ -31,16 +31,16 @@ type Server struct {
 func NewServer(cfg config.Config) *Server {
 	context := context.Background()
 	var err error
-	var storage storage.Storage
 	secret := []byte(cfg.SecretKey)
-	storage, err = database.NewDatabase(context, cfg.DatabaseAddress)
+	db, err := database.NewDatabase(context, cfg.DatabaseAddress)
 	if err != nil {
 		log.Println("error while creating new database:", err)
 	}
 	return &Server{
 		Addr:      cfg.Address,
-		Storage:   storage,
+		Storage:   db,
 		SecretKey: secret,
+		Auth:      NewAuth(context, db, cfg.JWTSecret),
 	}
 }
 

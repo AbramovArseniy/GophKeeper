@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	"github.com/go-chi/jwtauth"
 	jwx "github.com/lestrrat-go/jwx/jwt"
@@ -19,12 +20,12 @@ const (
 )
 
 type AuthJWT struct {
-	UserStorage types.UserDB
+	UserStorage storage.UserStorage
 	AuthToken   *jwtauth.JWTAuth
 	context     context.Context
 }
 
-func NewAuth(context context.Context, store types.UserDB, secret string) *AuthJWT {
+func NewAuth(context context.Context, store storage.UserStorage, secret string) *AuthJWT {
 	jwtAuth := jwtauth.New("HS256", []byte(secret), nil)
 
 	return &AuthJWT{

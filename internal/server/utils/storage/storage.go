@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -25,4 +26,6 @@ type Storage interface {
 
 type UserStorage interface {
 	FindUser(login string) (*User, error)
+	RegisterNewUser(login string, password string) (types.User, error)
+	GetUserData(login string) (types.User, error)
 }

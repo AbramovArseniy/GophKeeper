@@ -17,7 +17,7 @@ type Config struct {
 	SecretKey       string
 }
 
-const defaultAddress = "localhost"
+const defaultAddress = "localhost:8080"
 
 // SetServerParams sets server config
 func SetServerParams() (cfg Config) {
@@ -33,7 +33,7 @@ func SetServerParams() (cfg Config) {
 	flag.StringVar(&flagDataBase, "d", "", "db_address")
 	flag.StringVar(&flagConfigFile, "c", "", "config_as_json")
 	flag.StringVar(&flagJWTSecret, "js", "", "jwt_secret_key")
-	flag.StringVar(&flagSecretKey, "k", "nobody_should_know_it", "secret_key_to_enc")
+	flag.StringVar(&flagSecretKey, "k", "", "secret_key_to_enc")
 	flag.Parse()
 	var exists bool
 	if cfgFile, exists = os.LookupEnv("CONFIG"); !exists {
@@ -69,5 +69,6 @@ func SetServerParams() (cfg Config) {
 	if !exists {
 		cfg.DatabaseAddress = flagDataBase
 	}
+	log.Println(cfg.JWTSecret, flagJWTSecret)
 	return cfg
 }

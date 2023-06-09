@@ -5,10 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	"github.com/golang-migrate/migrate"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -141,4 +146,56 @@ func (d *DataBase) FindUser(login string) (*storage.User, error) {
 	}
 
 	return &user, nil
+}
+
+func (d *DataBase) RegisterNewUser(login string, password string) (types.User, error) {
+	user := types.User{
+		Login:        login,
+		HashPassword: password,
+	}
+	query := `INSERT INTO users (login, password_hash) VALUES ($1, $2) returning id`
+	row := d.db.QueryRowContext(context.Background(), query, login, password)
+	if err := row.Scan(&user.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.User{}, ErrKeyNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == pgerrcode.UniqueViolation {
+				return types.User{}, ErrUserExists
+			}
+		}
+		return types.User{}, ErrScanData
+	}
+
+	return user, nil
+}
+
+func (d *DataBase) GetUserData(login string) (types.User, error) {
+	var user types.User
+
+	tx, err := d.db.BeginTx(d.ctx, nil)
+	if err != nil {
+		return user, err
+	}
+
+	defer tx.Rollback()
+
+	selectUserStmt, err := tx.PrepareContext(d.ctx, selectUserStmt)
+	if err != nil {
+		return user, err
+	}
+
+	defer func() {
+		if err := selectUserStmt.Close(); err != nil {
+			log.Println("Error when close:", err)
+		}
+	}()
+
+	row := selectUserStmt.QueryRow(login)
+	err = row.Scan(&user.ID, &user.Login, &user.HashPassword)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return types.User{}, nil
+	}
+	return user, err
 }
