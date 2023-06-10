@@ -14,7 +14,8 @@ import (
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage/database"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
-	"github.com/go-chi/chi/v5"
+	echojwt "github.com/labstack/echo-jwt/v4"
+	"github.com/labstack/echo/v4"
 )
 
 const contentTypeJSON = "application/json"
@@ -23,6 +24,7 @@ const contentTypeJSON = "application/json"
 type Server struct {
 	Addr      string
 	Storage   storage.Storage
+	jwtSecret string
 	Auth      types.Authorization
 	SecretKey []byte
 }
@@ -40,164 +42,171 @@ func NewServer(cfg config.Config) *Server {
 		Addr:      cfg.Address,
 		Storage:   db,
 		SecretKey: secret,
+		jwtSecret: cfg.JWTSecret,
 		Auth:      NewAuth(context, db, cfg.JWTSecret),
 	}
 }
 
-func (s *Server) RegistHandler(w http.ResponseWriter, r *http.Request) {
-	httpStatus, token, err := services.RegistService(r, s.Auth)
-	if err != nil {
-		log.Println("error with register service:", err)
-	}
-	w.Header().Set("Authorization", "Bearer "+token)
-	w.WriteHeader(httpStatus)
+func (s *Server) RegistHandler(c echo.Context) error {
+	httpStatus, token, err := services.RegistService(c.Request(), s.Auth)
+
+	c.Response().Header().Set("Authorization", "Bearer "+token)
+	c.Response().Writer.WriteHeader(httpStatus)
+
+	return err
 }
 
-func (s *Server) AuthHandler(w http.ResponseWriter, r *http.Request) {
-	httpStatus, token, err := services.AuthService(r, s.Auth)
-	if err != nil {
-		log.Println("error with authentication service:", err)
-	}
-	w.Header().Set("Authorization", token)
-	w.WriteHeader(httpStatus)
+func (s *Server) AuthHandler(c echo.Context) error {
+	httpStatus, token, err := services.AuthService(c.Request(), s.Auth)
+	c.Response().Header().Set("Authorization", token)
+	c.Response().Writer.WriteHeader(httpStatus)
+	return err
 }
 
-func (s *Server) PostSaveDataHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != contentTypeJSON {
-		http.Error(w, "wrong content type", http.StatusBadRequest)
-		log.Println("wrong content type:", r.Header.Get("Content-Type"))
-		return
+func (s *Server) PostSaveDataHandler(c echo.Context) error {
+	if c.Request().Header.Get("Content-Type") != contentTypeJSON {
+		http.Error(c.Response().Writer, "wrong content type", http.StatusBadRequest)
+		log.Println("wrong content type:", c.Request().Header.Get("Content-Type"))
+		return nil
 	}
-	defer r.Body.Close()
-	body, err := io.ReadAll(r.Body)
+	defer c.Request().Body.Close()
+	body, err := io.ReadAll(c.Request().Body)
 	if err != nil {
-		http.Error(w, "cannot read request body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot read request body", http.StatusInternalServerError)
 		log.Println("error while reading request body:", err)
-		return
+		return nil
 	}
 	var meta storage.InfoMeta
 	err = json.Unmarshal(body, &meta)
 	if err != nil {
-		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot unmarshal request body", http.StatusInternalServerError)
 		log.Println("error while unmarshalling request body:", err)
-		return
+		return nil
 	}
 	data := storage.NewInfo(meta.Type)
 	if data == nil {
-		http.Error(w, "wrong data type", http.StatusBadRequest)
+		http.Error(c.Response().Writer, "wrong data type", http.StatusBadRequest)
 		log.Println("wrong data type")
-		return
+		return nil
 	}
 	err = json.Unmarshal(body, &data)
 	if err != nil {
-		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot unmarshal request body", http.StatusInternalServerError)
 		log.Println("error while unmarshalling request body:", err)
-		return
+		return nil
 	}
 	binData, err := data.MakeBinary()
 	if err != nil {
-		http.Error(w, "cannot make data binary", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot make data binary", http.StatusInternalServerError)
 		log.Println("error while making data binary:", err)
-		return
+		return nil
 	}
 	encData, err := crypto.Encrypt(binData, s.SecretKey)
 	if err != nil {
-		http.Error(w, "cannot encrypt data", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot encrypt data", http.StatusInternalServerError)
 		log.Println("error while encrypting data:", err)
-		return
+		return nil
 	}
 	err = s.Storage.SaveData(encData, meta)
 	if errors.Is(err, storage.ErrInvalidData) {
-		http.Error(w, "invalid data", http.StatusBadRequest)
+		http.Error(c.Response().Writer, "invalid data", http.StatusBadRequest)
 	}
 	if err != nil {
-		http.Error(w, "cannot save data to database", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot save data to database", http.StatusInternalServerError)
 		log.Println("error while  saving data to database:", err)
-		return
+		return nil
 	}
-	w.WriteHeader(http.StatusOK)
+	c.Response().Writer.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (s *Server) GetDataByTypeHandler(w http.ResponseWriter, r *http.Request) {
+// func (s *Server) GetDataByTypeHandler(c echo.Context) error {
 
-}
+// }
 
-func (s *Server) GetAllUsersDataHandler(w http.ResponseWriter, r *http.Request) {
+// func (s *Server) GetAllUsersDataHandler(c echo.Context) error {
 
-}
+// }
 
-func (s *Server) GetDataByNameHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != contentTypeJSON {
-		http.Error(w, "wrong content type", http.StatusBadRequest)
-		log.Println("wrong content type:", r.Header.Get("Content-Type"))
-		return
+func (s *Server) GetDataByNameHandler(c echo.Context) error {
+	if c.Request().Header.Get("Content-Type") != contentTypeJSON {
+		http.Error(c.Response().Writer, "wrong content type", http.StatusBadRequest)
+		log.Println("wrong content type:", c.Request().Header.Get("Content-Type"))
+		return nil
 	}
-	defer r.Body.Close()
-	reqBody, err := io.ReadAll(r.Body)
+	defer c.Request().Body.Close()
+	reqBody, err := io.ReadAll(c.Request().Body)
 	if err != nil {
-		http.Error(w, "cannot read request body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot read request body", http.StatusInternalServerError)
 		log.Println("error while reading request body:", err)
-		return
+		return nil
 	}
 	var meta storage.InfoMeta
 	err = json.Unmarshal(reqBody, &meta)
 	if err != nil {
-		http.Error(w, "cannot unmarshal request body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot unmarshal request body", http.StatusInternalServerError)
 		log.Println("error while unmarshalling request body:", err)
-		return
+		return nil
 	}
 	if s.Auth != nil {
-		meta.Login = s.Auth.GetUserLogin(r)
+		meta.Login = s.Auth.GetUserLogin(c.Request())
 	} else {
 		log.Println("no jwt auth")
 	}
 	encData, err := s.Storage.GetData(meta)
 	if errors.Is(err, storage.ErrDataNotFound) {
-		http.Error(w, "no data found", http.StatusNotFound)
-		return
+		http.Error(c.Response().Writer, "no data found", http.StatusNotFound)
+		return nil
 	}
 	if errors.Is(err, storage.ErrInvalidData) {
-		http.Error(w, "invalid data", http.StatusBadRequest)
-		return
+		http.Error(c.Response().Writer, "invalid data", http.StatusBadRequest)
+		return nil
 	}
 	if err != nil {
-		http.Error(w, "cannot get data from database", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot get data from database", http.StatusInternalServerError)
 		log.Println("error while getting data from database:", err)
-		return
+		return nil
 	}
 	binData, err := crypto.Decrypt(encData, s.SecretKey)
 	if err != nil {
-		http.Error(w, "cannot decrypt data", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot decrypt data", http.StatusInternalServerError)
 		log.Println("error while decrypting data:", err)
-		return
+		return nil
 	}
 	data := storage.NewInfo(meta.Type)
 	err = data.DecodeBinary(binData)
 	if err != nil {
-		log.Println("error while decoding binary: %w", err)
+		log.Println("error while decoding binary:", err)
+		http.Error(c.Response().Writer, "cannot decode data binary", http.StatusInternalServerError)
+		return nil
 	}
 	respBody, err := json.MarshalIndent(&data, "  ", "")
 	if err != nil {
-		http.Error(w, "cannot marshal response body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot marshal response body", http.StatusInternalServerError)
 		log.Println("error while marshalling response body:", err)
-		return
+		return nil
 	}
-	_, err = w.Write(respBody)
+	_, err = c.Response().Writer.Write(respBody)
 	if err != nil {
-		http.Error(w, "cannot write response body", http.StatusInternalServerError)
+		http.Error(c.Response().Writer, "cannot write response body", http.StatusInternalServerError)
 		log.Println("error while writing response body:", err)
-		return
+		return nil
 	}
-	w.WriteHeader(http.StatusOK)
+	c.Response().Writer.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (s *Server) Route() chi.Router {
-	router := chi.NewRouter()
-	router.Post("/user/register/", s.RegistHandler)
-	router.Post("/user/login/", s.AuthHandler)
-	router.Post("/user/add-data/", s.PostSaveDataHandler)
-	router.Post("/user/get-data-by-type/", s.GetDataByTypeHandler)
-	router.Get("/user/get-users-data/", s.GetAllUsersDataHandler)
-	router.Post("/user/get-data-by-name/", s.GetDataByNameHandler)
-	return router
+func (s *Server) Route() *echo.Echo {
+	e := echo.New()
+
+	e.POST("/user/auth/register/", s.RegistHandler)
+	e.POST("/user/auth/login/", s.AuthHandler)
+
+	logged := e.Group("/user/auth", echojwt.JWT([]byte(s.jwtSecret)))
+	logged.POST("/user/add-data/", s.PostSaveDataHandler)
+	//router.Post("/user/get-data-by-type/", s.GetDataByTypeHandler)
+	//router.Get("/user/get-users-data/", s.GetAllUsersDataHandler)
+	logged.POST("/user/get-data-by-name/", s.GetDataByNameHandler)
+
+	return e
 }

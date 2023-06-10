@@ -9,12 +9,13 @@ import (
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
-	"github.com/golang-migrate/migrate"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var (
@@ -46,43 +47,27 @@ func NewDatabase(ctx context.Context, dba string) (*DataBase, error) {
 		ctx: ctx,
 		dba: dba,
 	}
-	dataBase.Migrate()
+	err = dataBase.Migrate()
+	if err != nil {
+		return nil, fmt.Errorf("migration error: %w", err)
+	}
 	return dataBase, nil
 }
 
 func (d *DataBase) Migrate() error {
-	// 	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
-	// 		id SERIAL UNIQUE,
-	// 		login VARCHAR UNIQUE NOT NULL,
-	// 		password_hash VARCHAR NOT NULL
-	// 	);`)
-	// 	if err != nil {
-	// 		log.Printf("Error during create users %s", err)
-	// 	}
-
-	// 	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
-	// 		login INT NOT NULL,
-	// 		data BYTEA NOT NULL,
-	// 		type SMALLINT NOT NULL,
-	// 		name VARCHAR NOT NULL,
-	// 		UNIQUE(login, type, name)
-	// 	);`)
-	// 	if err != nil {
-	// 		log.Printf("Error during create keeper %s", err)
-	// 	}
-	path := "file://internal/server/utils/storage/database/migrations"
-	m, err := migrate.New(path, d.dba+"&x-migrations-table=migrations")
+	driver, err := postgres.WithInstance(d.db, &postgres.Config{})
 	if err != nil {
+		return fmt.Errorf("could not create driver: %w", err)
+	}
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://../../internal/server/utils/storage/database/migrations",
+		d.dba, driver)
+	if err != nil {
+		return fmt.Errorf("could not create migration: %w", err)
+	}
+	if err = m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return err
 	}
-	err = m.Up()
-	if errors.Is(err, migrate.ErrNoChange) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -194,7 +179,7 @@ func (d *DataBase) GetUserData(login string) (types.User, error) {
 
 	row := selectUserStmt.QueryRow(login)
 	err = row.Scan(&user.ID, &user.Login, &user.HashPassword)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return types.User{}, nil
 	}
 	return user, err
