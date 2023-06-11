@@ -107,6 +107,11 @@ func (s *Server) PostSaveDataHandler(c echo.Context) error {
 		log.Println("error while encrypting data:", err)
 		return nil
 	}
+	if s.Auth != nil {
+		meta.Login = s.Auth.GetUserLogin(c.Request())
+	} else {
+		log.Println("no jwt auth")
+	}
 	err = s.Storage.SaveData(encData, meta)
 	if errors.Is(err, storage.ErrInvalidData) {
 		http.Error(c.Response().Writer, "invalid data", http.StatusBadRequest)
@@ -202,11 +207,11 @@ func (s *Server) Route() *echo.Echo {
 	e.POST("/user/auth/register/", s.RegistHandler)
 	e.POST("/user/auth/login/", s.AuthHandler)
 
-	logged := e.Group("/user/auth", echojwt.JWT([]byte(s.jwtSecret)))
-	logged.POST("/user/add-data/", s.PostSaveDataHandler)
-	//router.Post("/user/get-data-by-type/", s.GetDataByTypeHandler)
-	//router.Get("/user/get-users-data/", s.GetAllUsersDataHandler)
-	logged.POST("/user/get-data-by-name/", s.GetDataByNameHandler)
+	logged := e.Group("/user", echojwt.WithConfig(echojwt.Config{SigningKey: []byte(s.jwtSecret)}))
+	logged.POST("/add-data/", s.PostSaveDataHandler)
+	//logged.POST("/get-data-by-type/", s.GetDataByTypeHandler)
+	//logged.GET("/get-users-data/", s.GetAllUsersDataHandler)
+	logged.POST("/get-data-by-name/", s.GetDataByNameHandler)
 
 	return e
 }
