@@ -7,12 +7,13 @@ import (
 )
 
 const (
-	LoginPassword InfoType = iota + 1
-	Card
-	Text
+	LoginPassword InfoType = "login-password"
+	Card          InfoType = "card"
+	Text          InfoType = "text"
+	Binary        InfoType = "binary"
 )
 
-type InfoType int
+type InfoType string
 
 func (i InfoType) String() string {
 	switch i {
@@ -32,14 +33,15 @@ type Info interface {
 }
 
 type InfoMeta struct {
-	Name  string
-	Type  InfoType
-	Login string
+	Name  string   `json:"name"`
+	Type  InfoType `json:"type"`
+	Login string   `json:"user_login"`
 }
 
 type InfoLoginPass struct {
-	Login    string
-	Password string
+	Login    string `json:"login"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
 }
 
 func (p *InfoLoginPass) MakeBinary() ([]byte, error) {
@@ -66,10 +68,11 @@ func (p *InfoLoginPass) DecodeBinary(bin []byte) error {
 }
 
 type InfoCard struct {
-	CardNumber string
-	Holder     string
-	Date       string
-	CVCcode    string
+	CardNumber string `json:"card_number"`
+	Holder     string `json:"holder"`
+	Date       string `json:"exp_date"`
+	CVCcode    string `json:"cvc"`
+	CardName   string
 }
 
 func (c *InfoCard) MakeBinary() ([]byte, error) {
@@ -96,7 +99,8 @@ func (c *InfoCard) DecodeBinary(bin []byte) error {
 }
 
 type InfoText struct {
-	Text string
+	Text string `json:"text"`
+	Name string `json:"name"`
 }
 
 func (t *InfoText) MakeBinary() ([]byte, error) {

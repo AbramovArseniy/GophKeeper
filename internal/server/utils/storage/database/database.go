@@ -5,18 +5,22 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var (
 	ErrUserExists         = errors.New("such user already exist in DB")
 	ErrScanData           = errors.New("error while scan user ID")
-	ErrInvalidData        = errors.New("error data is invalid")
 	ErrInvalidUser        = errors.New("error user is invalid")
 	ErrKeyNotFound        = errors.New("error user ID not found")
 	selectDataStmt string = `SELECT data FROM keeper WHERE type=$1 AND login=$2 AND name=$3`
@@ -38,46 +42,32 @@ func NewDatabase(ctx context.Context, dba string) (*DataBase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DataBase{
+	dataBase := &DataBase{
 		db:  db,
 		ctx: ctx,
 		dba: dba,
-	}, nil
+	}
+	err = dataBase.Migrate()
+	if err != nil {
+		return nil, fmt.Errorf("migration error: %w", err)
+	}
+	return dataBase, nil
 }
 
 func (d *DataBase) Migrate() error {
-	// 	_, err := d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS users (
-	// 		id SERIAL UNIQUE,
-	// 		login VARCHAR UNIQUE NOT NULL,
-	// 		password_hash VARCHAR NOT NULL
-	// 	);`)
-	// 	if err != nil {
-	// 		log.Printf("Error during create users %s", err)
-	// 	}
-
-	// 	_, err = d.db.ExecContext(d.ctx, `CREATE TABLE IF NOT EXISTS keeper(
-	// 		login INT NOT NULL,
-	// 		data BYTEA NOT NULL,
-	// 		type SMALLINT NOT NULL,
-	// 		name VARCHAR NOT NULL,
-	// 		UNIQUE(login, type, name)
-	// 	);`)
-	// 	if err != nil {
-	// 		log.Printf("Error during create keeper %s", err)
-	// 	}
-	path := "file://internal/server/utils/storage/database/migrations"
-	m, err := migrate.New(path, d.dba+"&x-migrations-table=migrations")
+	driver, err := postgres.WithInstance(d.db, &postgres.Config{})
 	if err != nil {
+		return fmt.Errorf("could not create driver: %w", err)
+	}
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://../../internal/server/utils/storage/database/migrations",
+		d.dba, driver)
+	if err != nil {
+		return fmt.Errorf("could not create migration: %w", err)
+	}
+	if err = m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return err
 	}
-	err = m.Up()
-	if errors.Is(err, migrate.ErrNoChange) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -85,37 +75,35 @@ func (d *DataBase) SaveData(encryptedData []byte, metadata storage.InfoMeta) err
 	_, err := d.db.ExecContext(d.ctx, `INSERT INTO keeper (data, login, type, name) VALUES ($1, $2, $3, $4)`,
 		encryptedData, metadata.Login, metadata.Type, metadata.Name)
 	if err != nil {
-		return err
+		return fmt.Errorf("error while inserting row into database: %w", err)
 	}
 
 	return nil
 }
 
-func (d *DataBase) GetData(metadata storage.InfoMeta) (storage.Info, error) {
+func (d *DataBase) GetData(metadata storage.InfoMeta) ([]byte, error) {
 	var data []byte
 	tx, err := d.db.BeginTx(d.ctx, nil)
 	if err != nil {
-		return nil, ErrInvalidData
+		return nil, storage.ErrInvalidData
 	}
 	defer tx.Rollback()
 
 	selectData, err := tx.PrepareContext(d.ctx, selectDataStmt)
 	if err != nil {
-		return nil, ErrInvalidData
+		return nil, storage.ErrInvalidData
 	}
 	defer selectData.Close()
 
 	row := selectData.QueryRowContext(d.ctx, metadata.Type, metadata.Login, metadata.Name)
 	err = row.Scan(&data)
-	if err != nil {
-		return nil, ErrInvalidData
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, storage.ErrDataNotFound
 	}
-	info := storage.NewInfo(metadata.Type)
-	err = info.DecodeBinary(data)
 	if err != nil {
-		return nil, fmt.Errorf("error while decoding binary: %w", err)
+		return nil, storage.ErrInvalidData
 	}
-	return info, nil
+	return data, nil
 }
 
 func (d *DataBase) Close() {
@@ -143,4 +131,56 @@ func (d *DataBase) FindUser(login string) (*storage.User, error) {
 	}
 
 	return &user, nil
+}
+
+func (d *DataBase) RegisterNewUser(login string, password string) (types.User, error) {
+	user := types.User{
+		Login:        login,
+		HashPassword: password,
+	}
+	query := `INSERT INTO users (login, password_hash) VALUES ($1, $2) returning id`
+	row := d.db.QueryRowContext(context.Background(), query, login, password)
+	if err := row.Scan(&user.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return types.User{}, ErrKeyNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == pgerrcode.UniqueViolation {
+				return types.User{}, ErrUserExists
+			}
+		}
+		return types.User{}, ErrScanData
+	}
+
+	return user, nil
+}
+
+func (d *DataBase) GetUserData(login string) (types.User, error) {
+	var user types.User
+
+	tx, err := d.db.BeginTx(d.ctx, nil)
+	if err != nil {
+		return user, err
+	}
+
+	defer tx.Rollback()
+
+	selectUserStmt, err := tx.PrepareContext(d.ctx, selectUserStmt)
+	if err != nil {
+		return user, err
+	}
+
+	defer func() {
+		if err := selectUserStmt.Close(); err != nil {
+			log.Println("Error when close:", err)
+		}
+	}()
+
+	row := selectUserStmt.QueryRow(login)
+	err = row.Scan(&user.ID, &user.Login, &user.HashPassword)
+	if errors.Is(err, sql.ErrNoRows) {
+		return types.User{}, nil
+	}
+	return user, err
 }
