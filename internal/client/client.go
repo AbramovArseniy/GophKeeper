@@ -5,12 +5,27 @@ import (
 	"fmt"
 	"log"
 
+	clienttypes "github.com/AbramovArseniy/GophKeeper/internal/client/utils/types"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/handlers"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
-	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
+	servertypes "github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	"github.com/manifoldco/promptui"
 	"google.golang.org/grpc/metadata"
 )
+
+type CommandLine struct {
+	action *MDAct
+}
+
+type MDAct struct {
+	act clienttypes.ClientAction
+	md  *metadata.MD
+}
+
+// Дописать!
+func (mda *MDAct) Connection(address string) error {
+	return mda.act.Connect(address)
+}
 
 func NewAction(address string, md *metadata.MD) (*MDAct, error) {
 	mda := &MDAct{md: md}
@@ -30,7 +45,7 @@ func (cli *CommandLine) StartCLI(ctx context.Context) (err error) {
 	// получаем токен в следующей строке, он нужен будет? пока стоит как прочерк
 	_, err = cli.Authentication(ctx)
 	if err != nil {
-		if err == ErrExitCLI {
+		if err == clienttypes.ErrExitCLI {
 			return nil
 		}
 		return fmt.Errorf("Authentication error: %w", err)
@@ -38,7 +53,7 @@ func (cli *CommandLine) StartCLI(ctx context.Context) (err error) {
 	fmt.Println("Authenticated successfully!")
 
 	if err := cli.Action(ctx); err != nil {
-		if err == ErrExitCLI {
+		if err == clienttypes.ErrExitCLI {
 			return nil
 		}
 		return fmt.Errorf("Action error: %w", err)
@@ -86,7 +101,7 @@ func register(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error: can't get password: %w", err)
 	}
-	request := types.User{
+	request := servertypes.User{
 		Login:        login,
 		HashPassword: password,
 	}
@@ -110,7 +125,7 @@ func authorize(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error: can't get password: %w", err)
 	}
-	request := types.User{
+	request := servertypes.User{
 		Login:        login,
 		HashPassword: password,
 	}
@@ -163,7 +178,7 @@ func (cli *CommandLine) Action(ctx context.Context) error {
 	return nil
 }
 
-func addInfo(ctx context.Context, client ClientAction) {
+func addInfo(ctx context.Context, client clienttypes.ClientAction) {
 	infoType := getInfoType()
 	infoName := getInfoName()
 
@@ -174,7 +189,7 @@ func addInfo(ctx context.Context, client ClientAction) {
 			Login:    getValueFromUser("Enter login"),
 			Password: getValueFromUser("Enter password"),
 		}
-		err := client.SavePassword(ctx, req)
+		err := client.SaveData(ctx, &req, infoType)
 		if err != nil {
 			fmt.Println("Cant save your info!")
 		}
@@ -188,7 +203,7 @@ func addInfo(ctx context.Context, client ClientAction) {
 			Date:       getValueFromUser("Enter expiration date"),
 			CVCcode:    getValueFromUser("Enter cvc code"),
 		}
-		err := client.SaveCard(ctx, req)
+		err := client.SaveData(ctx, &req, infoType)
 		if err != nil {
 			fmt.Println("Cant save your info!")
 		}
@@ -199,7 +214,7 @@ func addInfo(ctx context.Context, client ClientAction) {
 			Name: infoName,
 			Text: getValueFromUser("Enter text"),
 		}
-		err := client.SaveText(ctx, req)
+		err := client.SaveData(ctx, &req, infoType)
 		if err != nil {
 			fmt.Println("Cant save your info!")
 		}
@@ -208,36 +223,51 @@ func addInfo(ctx context.Context, client ClientAction) {
 	}
 }
 
-func getInfo(ctx context.Context, client ClientAction) {
+func getInfo(ctx context.Context, client clienttypes.ClientAction) {
 	infoType := getInfoType()
 	infoName := getInfoName()
 
-	req := GetRequest{Name: infoName}
+	req := clienttypes.GetRequest{Name: infoName, Type: infoType}
 
 	switch infoType {
 	case storage.LoginPassword:
-		resp, err := client.GetPassword(ctx, req)
+		resp, err := client.GetData(ctx, req)
+
 		if err != nil {
 			fmt.Println("Cant get your info!")
 		}
-		fmt.Printf("Login: %s\n", resp.Login)
-		fmt.Printf("Password: %s\n", resp.Password)
+		info, ok := resp.(*storage.InfoLoginPass)
+		if !ok {
+			fmt.Println("Cant get your info!")
+		}
+		fmt.Printf("Login: %s\n", info.Login)
+		fmt.Printf("Password: %s\n", info.Password)
 		return
 	case storage.Card:
-		resp, err := client.GetCard(ctx, req)
+		resp, err := client.GetData(ctx, req)
+
 		if err != nil {
 			fmt.Println("Cant get your info!")
 		}
-		fmt.Printf("CardNumber: %s\n", resp.CardNumber)
-		fmt.Printf("Holder: %s\n", resp.Holder)
-		fmt.Printf("Date: %s\n", resp.Date)
-		fmt.Printf("CVCcode: %s\n", resp.CVCcode)
-	case storage.Text:
-		resp, err := client.GetText(ctx, req)
-		if err != nil {
-			fmt.Println("Can't get your info!")
+		info, ok := resp.(*storage.InfoCard)
+		if !ok {
+			fmt.Println("Cant get your info!")
 		}
-		fmt.Printf("Text: %s\n", resp.Text)
+		fmt.Printf("CardNumber: %s\n", info.CardNumber)
+		fmt.Printf("Holder: %s\n", info.Holder)
+		fmt.Printf("Date: %s\n", info.Date)
+		fmt.Printf("CVCcode: %s\n", info.CVCcode)
+	case storage.Text:
+		resp, err := client.GetData(ctx, req)
+
+		if err != nil {
+			fmt.Println("Cant get your info!")
+		}
+		info, ok := resp.(*storage.InfoText)
+		if !ok {
+			fmt.Println("Cant get your info!")
+		}
+		fmt.Printf("Text: %s\n", info.Text)
 	}
 	fmt.Println(infoType, infoName)
 }
@@ -285,5 +315,5 @@ func getInfoType() storage.InfoType {
 }
 
 func exitCLI(ctx context.Context) error {
-	return ErrExitCLI
+	return clienttypes.ErrExitCLI
 }
