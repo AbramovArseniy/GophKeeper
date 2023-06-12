@@ -7,6 +7,8 @@ import (
 	// "os"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/client"
+	"github.com/AbramovArseniy/GophKeeper/internal/client/utils/config"
+
 	// "github.com/AbramovArseniy/GophKeeper/internal/server/handlers"
 	// "github.com/AbramovArseniy/GophKeeper/internal/server/utils/config"
 	"google.golang.org/grpc/metadata"
@@ -32,8 +34,8 @@ func main() {
 	var md metadata.MD
 	metadate := metadata.New(map[string]string{})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadate)
-
-	action, err := client.NewAction("127.0.0.1:9000", &md)
+	cfg := config.SetClientParams()
+	action, err := client.NewAction(cfg.ServerAddr, &md)
 	if err != nil {
 		log.Fatal("Failed connect to server")
 	}
