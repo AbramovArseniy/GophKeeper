@@ -32,7 +32,7 @@ func (c *HTTPClient) SavePassword(ctx context.Context, req storage.InfoLoginPass
 	}
 	byteBody = []byte(string(byteBody[:len(byteBody)-1]) + fmt.Sprintf(", \"type\":\"%s\"}", infoType))
 	reqBody := bytes.NewBuffer(byteBody)
-	resp, err := c.client.Post(c.address, "application/json", reqBody)
+	resp, err := c.client.Post(c.address+"/user/add-data", "application/json", reqBody)
 	if err != nil {
 		return fmt.Errorf("error while making request: %w", err)
 	}
@@ -50,7 +50,7 @@ func (c *HTTPClient) GetData(ctx context.Context, req types.GetRequest) (storage
 		return nil, err
 	}
 	reqBody := bytes.NewBuffer(byteBody)
-	resp, err := c.client.Post(c.address, "application/json", reqBody)
+	resp, err := c.client.Post(c.address+"/user/get-data-by-name", "application/json", reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("error while making request: %w", err)
 	}
