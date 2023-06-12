@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -133,6 +135,7 @@ import (
 	// Alloc: 400.000000
 }
 */
+
 // TestHandlers tests handlers
 func TestHandlers(t *testing.T) {
 	type want struct {
@@ -146,6 +149,48 @@ func TestHandlers(t *testing.T) {
 		body   string
 		want   want
 	}{
+		{
+			name:   "200 Success register",
+			URL:    "/user/auth/register/",
+			method: http.MethodPost,
+			body:   `{"login":"test_login", "password":"test_password"}`,
+			want:   want{code: 200},
+		},
+		{
+			name:   "400 Bad request register empty login",
+			URL:    "/user/auth/register/",
+			method: http.MethodPost,
+			body:   `{"login":"", "password":"test_password"}`,
+			want:   want{code: 400},
+		},
+		{
+			name:   "400 Bad request register empty password",
+			URL:    "/user/auth/register/",
+			method: http.MethodPost,
+			body:   `{"login":"err_login", "password":""}`,
+			want:   want{code: 400},
+		},
+		{
+			name:   "400 Bad request login empty login",
+			URL:    "/user/auth/login/",
+			method: http.MethodPost,
+			body:   `{"login":"", "password":"test_password"}`,
+			want:   want{code: 400},
+		},
+		{
+			name:   "400 Bad request login empty password",
+			URL:    "/user/auth/login/",
+			method: http.MethodPost,
+			body:   `{"login":"test_login", "password":""}`,
+			want:   want{code: 400},
+		},
+		{
+			name:   "200 Success login",
+			URL:    "/user/auth/login/",
+			method: http.MethodPost,
+			body:   `{"login":"test_login", "password":"test_password"}`,
+			want:   want{code: 200},
+		},
 		{
 			name:   "200 Success upload text data",
 			URL:    "/user/add-data/",
@@ -175,6 +220,30 @@ func TestHandlers(t *testing.T) {
 			want:   want{code: http.StatusBadRequest},
 		},
 		{
+			name:   "200 Success get card data",
+			URL:    "/user/get-data-by-name/",
+			method: http.MethodPost,
+			body:   `{"type":"card","name":"card_data"}`,
+			want: want{code: http.StatusNotFound,
+				body: []string{`{"number":"123456","holder":"user","exp_date":"10/22","cvc":"123"}`}},
+		},
+		{
+			name:   "200 Success get text data",
+			URL:    "/user/get-data-by-name/",
+			method: http.MethodPost,
+			body:   `{"type":"card","name":"text_data"}`,
+			want: want{code: http.StatusNotFound,
+				body: []string{`{"text":"some_text"}`}},
+		},
+		{
+			name:   "200 Success get text data",
+			URL:    "/user/get-data-by-name/",
+			method: http.MethodPost,
+			body:   `{"type":"card","name":"login-password_data"}`,
+			want: want{code: http.StatusNotFound,
+				body: []string{`{"login":"some_login","password":"some_password"}`}},
+		},
+		{
 			name:   "404 Not Found get new name",
 			URL:    "/user/get-data-by-name/",
 			method: http.MethodPost,
@@ -194,12 +263,16 @@ func TestHandlers(t *testing.T) {
 		SecretKey: "secretKeyReallyy",
 	}
 	s := NewServer(cfg)
-	s.Storage = mockstorage.NewMockStorage()
+	ms := mockstorage.NewMockStorage()
+	s.Storage = ms
+	s.Auth = NewAuth(context.Background(), ms, "jwt_secret")
 	server := httptest.NewServer(s.Route())
+	var auth = ""
 	defer server.Close()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, body := RunRequest(t, server, tt.method, tt.URL, tt.body, "application/json")
+			resp, authHeader, body := RunRequest(t, server, tt.method, tt.URL, tt.body, "application/json", auth)
+			auth = authHeader
 			defer resp.Body.Close()
 			assert.Equal(t, tt.want.code, resp.StatusCode)
 			for _, s := range tt.want.body {
@@ -211,17 +284,24 @@ func TestHandlers(t *testing.T) {
 }
 
 // RunRequest does request to a server
-func RunRequest(t *testing.T, ts *httptest.Server, method string, query string, body string, contentType string) (*http.Response, string) {
+func RunRequest(t *testing.T, ts *httptest.Server, method string, query string, body string, contentType string, authorization string) (*http.Response, string, string) {
 	reader := strings.NewReader(body)
 	req, err := http.NewRequest(method, ts.URL+query, reader)
 	req.Header.Add("Content-Type", contentType)
-
+	if query != "/user/auth/login/" {
+		req.Header.Add("Authorization", "Bearer "+authorization)
+	}
+	log.Printf(`query: %s
+	auth: %s
+	body: %s`, query, req.Header.Get("Authorization"), body)
 	require.NoError(t, err)
-
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-
+	auth := resp.Header.Get("Authorization")
+	if query != "/user/auth/login/" || auth == "" || auth == "Bearer " {
+		auth = authorization
+	}
 	RespBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return resp, string(RespBody)
+	return resp, auth, string(RespBody)
 }

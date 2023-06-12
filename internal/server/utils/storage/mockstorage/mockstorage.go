@@ -2,6 +2,7 @@ package mockstorage
 
 import (
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 )
 
 type MockData struct {
@@ -11,14 +12,9 @@ type MockData struct {
 	Login string
 }
 
-type MockUser struct {
-	Login    string
-	Password string
-}
-
 type MockStorage struct {
 	Storage []MockData
-	Users   []MockUser
+	Users   []types.User
 }
 
 func NewMockStorage() *MockStorage {
@@ -51,6 +47,37 @@ func (ms *MockStorage) GetData(metadata storage.InfoMeta) ([]byte, error) {
 	return data, nil
 }
 
-func (ms *MockStorage) Close() {
-	return
+func (ms *MockStorage) Close() {}
+
+func (ms *MockStorage) FindUser(login string) (*types.User, error) {
+	for _, user := range ms.Users {
+		if user.Login == login {
+			return &user, nil
+		}
+	}
+	return nil, storage.ErrDataNotFound
+}
+
+func (ms *MockStorage) RegisterNewUser(login string, password string) (types.User, error) {
+	user := types.User{
+		ID:           len(ms.Users) + 1,
+		Login:        login,
+		HashPassword: password,
+	}
+	for _, user := range ms.Users {
+		if user.Login == login {
+			return types.User{}, storage.ErrUserExists
+		}
+	}
+	ms.Users = append(ms.Users, user)
+	return user, nil
+}
+
+func (ms *MockStorage) GetUserData(login string) (types.User, error) {
+	for _, user := range ms.Users {
+		if user.Login == login {
+			return user, nil
+		}
+	}
+	return types.User{}, storage.ErrDataNotFound
 }

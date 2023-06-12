@@ -19,7 +19,6 @@ import (
 )
 
 var (
-	ErrUserExists         = errors.New("such user already exist in DB")
 	ErrScanData           = errors.New("error while scan user ID")
 	ErrInvalidUser        = errors.New("error user is invalid")
 	ErrKeyNotFound        = errors.New("error user ID not found")
@@ -110,8 +109,8 @@ func (d *DataBase) Close() {
 	d.db.Close()
 }
 
-func (d *DataBase) FindUser(login string) (*storage.User, error) {
-	var user storage.User
+func (d *DataBase) FindUser(login string) (*types.User, error) {
+	var user types.User
 	tx, err := d.db.BeginTx(d.ctx, nil)
 	if err != nil {
 		return nil, ErrInvalidUser
@@ -125,7 +124,7 @@ func (d *DataBase) FindUser(login string) (*storage.User, error) {
 	defer selectUser.Close()
 
 	row := selectUser.QueryRowContext(d.ctx, login)
-	err = row.Scan(&user.Id, &user.Login, &user.PasswordHash)
+	err = row.Scan(&user.ID, &user.Login, &user.HashPassword)
 	if err != nil {
 		return nil, ErrInvalidUser
 	}
@@ -147,7 +146,7 @@ func (d *DataBase) RegisterNewUser(login string, password string) (types.User, e
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return types.User{}, ErrUserExists
+				return types.User{}, storage.ErrUserExists
 			}
 		}
 		return types.User{}, ErrScanData

@@ -9,15 +9,10 @@ import (
 )
 
 var (
+	ErrUserExists   = errors.New("such user already exist in DB")
 	ErrInvalidData  = errors.New("error data is invalid")
 	ErrDataNotFound = errors.New("error data not found")
 )
-
-type User struct {
-	Id           int
-	Login        string
-	PasswordHash string
-}
 
 type Storage interface {
 	SaveData(encryptedData []byte, metadata InfoMeta) error
@@ -25,7 +20,7 @@ type Storage interface {
 }
 
 type UserStorage interface {
-	FindUser(login string) (*User, error)
+	FindUser(login string) (*types.User, error)
 	RegisterNewUser(login string, password string) (types.User, error)
 	GetUserData(login string) (types.User, error)
 }

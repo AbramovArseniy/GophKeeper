@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage/database"
+	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	"github.com/go-chi/jwtauth"
 	jwx "github.com/lestrrat-go/jwx/jwt"
@@ -55,7 +55,7 @@ func (a *AuthJWT) RegisterUser(userdata types.UserData) (types.User, error) {
 	user, err := a.UserStorage.RegisterNewUser(userdata.Login, string(hash))
 	if err != nil {
 		log.Println("error Register New User")
-		return types.User{}, database.ErrUserExists
+		return types.User{}, storage.ErrUserExists
 	}
 
 	return user, nil
