@@ -7,9 +7,7 @@ import (
 
 	"github.com/AbramovArseniy/GophKeeper/internal/client/httpclient"
 	clienttypes "github.com/AbramovArseniy/GophKeeper/internal/client/utils/types"
-	"github.com/AbramovArseniy/GophKeeper/internal/server/handlers"
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/storage"
-	servertypes "github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
 	"github.com/manifoldco/promptui"
 	"google.golang.org/grpc/metadata"
 )
@@ -23,17 +21,8 @@ type MDAct struct {
 	md  *metadata.MD
 }
 
-// Дописать!
-func (mda *MDAct) Connection(address string) error {
-	return mda.act.Connect(address)
-}
-
 func NewAction(address string, md *metadata.MD) (*MDAct, error) {
 	mda := &MDAct{md: md, act: httpclient.NewHTTPClient(address)}
-	if err := mda.Connection(address); err != nil {
-		return nil, fmt.Errorf("error: wrong connection: %w", err)
-	}
-
 	log.Println("Connected successfully!")
 	return mda, nil
 }
@@ -43,8 +32,7 @@ func NewCLI(action *MDAct) *CommandLine {
 }
 
 func (cli *CommandLine) StartCLI(ctx context.Context) (err error) {
-	// получаем токен в следующей строке, он нужен будет? пока стоит как прочерк
-	_, err = cli.Authentication(ctx)
+	err = cli.Authentication(ctx)
 	if err != nil {
 		if err == clienttypes.ErrExitCLI {
 			return nil
@@ -63,80 +51,65 @@ func (cli *CommandLine) StartCLI(ctx context.Context) (err error) {
 	return nil
 }
 
-func (cli *CommandLine) Authentication(ctx context.Context) (string, error) {
+func (cli *CommandLine) Authentication(ctx context.Context) error {
 	prompt := promptui.Select{
 		Label: "Welcome to GophKeeper! What would you like to do?",
 		Items: []string{"Register", "Log in", "Exit"},
 	}
 	idx, _, err := prompt.Run()
 	if err != nil {
-		return "", fmt.Errorf("error choose action prompt failed: %w", err)
+		return fmt.Errorf("error choose action prompt failed: %w", err)
 	}
 	if idx == 0 {
-		token, err := register(ctx, cli)
+		err := register(ctx, cli)
 		if err != nil {
-			return "", fmt.Errorf("error: can't authorize: %w", err)
+			return fmt.Errorf("error: can't authorize: %w", err)
 		}
-		return token, nil
+		return nil
 	}
 	if idx == 1 {
-		token, err := authorize(ctx, cli)
+		err := authorize(ctx, cli)
 		if err != nil {
-			return "", fmt.Errorf("error: can't authorize: %w", err)
+			return fmt.Errorf("error: can't authorize: %w", err)
 		}
-		return token, nil
+		return nil
 	}
 	if idx == 2 {
-		return "", exitCLI(ctx)
+		return exitCLI(ctx)
 	}
 	cli.Action(ctx)
-	return "", nil
+	return nil
 }
 
-func register(ctx context.Context, cli *CommandLine) (string, error) {
+func register(ctx context.Context, cli *CommandLine) error {
 	login, err := getLogin()
 	if err != nil {
-		return "", fmt.Errorf("error: can't get username: %w", err)
+		return fmt.Errorf("error: can't get username: %w", err)
 	}
 	password, err := getPassword()
 	if err != nil {
-		return "", fmt.Errorf("error: can't get password: %w", err)
-	}
-	request := servertypes.User{
-		Login:        login,
-		HashPassword: password,
+		return fmt.Errorf("error: can't get password: %w", err)
 	}
 	authReq := clienttypes.AuthRequest{
 		Login:    login,
 		Password: password,
 	}
-	cli.action.act.Register(ctx, authReq)
+	err = cli.action.act.Register(ctx, authReq)
 	if err != nil {
-		return "", fmt.Errorf("error: can't register: %w", err)
-	}
-	var authjwt handlers.AuthJWT
-	token, err := authjwt.GenerateToken(request)
-	// var ustore storage.UserStorage
-	// response, err := ustore.RegisterNewUser(request.Login, request.PasswordHash)
-	if err != nil {
-		return "", fmt.Errorf("error: can't register: %w", err)
+		return fmt.Errorf("error: can't register: %w", err)
 	}
 
-	return token, nil
+	return nil
 }
 
-func authorize(ctx context.Context, cli *CommandLine) (string, error) {
+func authorize(ctx context.Context, cli *CommandLine) error {
 	login, err := getLogin()
 	if err != nil {
-		return "", fmt.Errorf("error: can't get username: %w", err)
+		return fmt.Errorf("error: can't get username: %w", err)
 	}
 	password, err := getPassword()
 	if err != nil {
-		return "", fmt.Errorf("error: can't get password: %w", err)
-	}
-	request := servertypes.User{
-		Login:        login,
-		HashPassword: password,
+		return fmt.Errorf("error: can't get password: %w", err)
 	}
 	authReq := clienttypes.AuthRequest{
 		Login:    login,
@@ -144,18 +117,10 @@ func authorize(ctx context.Context, cli *CommandLine) (string, error) {
 	}
 	err = cli.action.act.Login(ctx, authReq)
 	if err != nil {
-		return "", fmt.Errorf("error: can't login: %w", err)
-	}
-	var authjwt handlers.AuthJWT
-	// Тут тоже генерация токена?
-	token, err := authjwt.GenerateToken(request)
-	// var ustore storage.UserStorage
-	// response, err := ustore.FindUser(request.Login)
-	if err != nil {
-		return "", fmt.Errorf("error: can't login: %w", err)
+		return fmt.Errorf("error: can't login: %w", err)
 	}
 
-	return token, nil
+	return nil
 }
 
 func getLogin() (string, error) {

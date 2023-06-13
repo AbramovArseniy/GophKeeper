@@ -22,14 +22,8 @@ type HTTPClient struct {
 func NewHTTPClient(address string) *HTTPClient {
 	return &HTTPClient{
 		client:  *http.DefaultClient,
-		address: address,
+		address: "http://" + address,
 	}
-}
-
-func (c *HTTPClient) Connect(address string) error {
-	c.client = http.Client{}
-	c.address = address
-	return nil
 }
 
 func (c *HTTPClient) SaveData(ctx context.Context, req storage.Info, infoType storage.InfoType, infoName string) error {

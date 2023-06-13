@@ -57,6 +57,8 @@ func (s *Server) RegistHandler(c echo.Context) error {
 }
 
 func (s *Server) AuthHandler(c echo.Context) error {
+	body, _ := io.ReadAll(c.Request().Body)
+	log.Println(string(body))
 	httpStatus, token, err := services.AuthService(c.Request(), s.Auth)
 	c.Response().Header().Set("Authorization", token)
 	c.Response().Writer.WriteHeader(httpStatus)

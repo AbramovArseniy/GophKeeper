@@ -14,7 +14,6 @@ type ClientAction interface {
 	GetData(ctx context.Context, req GetRequest) (storage.Info, error)
 	Register(ctx context.Context, req AuthRequest) error
 	Login(ctx context.Context, req AuthRequest) error
-	Connect(address string) error
 }
 
 type GetRequest struct {
