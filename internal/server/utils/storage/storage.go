@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/AbramovArseniy/GophKeeper/internal/server/utils/types"
+
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
